@@ -1005,6 +1005,15 @@ doca_error_t doca_verbs_qp_open::init2rtr(struct doca_verbs_qp_attr_open *verbs_
         DEVX_SET(qpc, qpc, log_rra_max,
                  doca_internal_utils_log2(verbs_qp_attr->max_dest_rd_atomic));
 
+    if (m_init_attr.ordering_semantic_set) {
+        /* dp_ordering is a 2-bit field split across two QPC offsets. Without the force
+         * bit the value is merged with the device-level dp_ordering configuration, so
+         * set it wherever the device allows. Validated in create(). */
+        DEVX_SET(qpc, qpc, dp_ordering_0, m_init_attr.ordering_semantic & 0x1);
+        DEVX_SET(qpc, qpc, dp_ordering_1, (m_init_attr.ordering_semantic >> 1) & 0x1);
+        DEVX_SET(qpc, qpc, dp_ordering_force, m_verbs_device_attr->m_dp_ordering_force);
+    }
+
     int mlx5_opt_param_mask{0};
     convert_doca_verbs_qp_attr_mask_to_legal_mlx5_qp_opt_param_mask(attr_mask, mlx5_opt_param_mask,
                                                                     DOCA_VERBS_QP_INIT2RTR);
@@ -1294,6 +1303,10 @@ doca_error_t doca_verbs_qp_open::query_qp(
     verbs_qp_init_attr->external_uar = m_init_attr.external_uar;
     verbs_qp_init_attr->core_direct_master = m_init_attr.core_direct_master;
     verbs_qp_init_attr->send_dbr_mode = m_init_attr.send_dbr_mode;
+    /* ordering_semantic_set is deliberately not copied out: it marks an explicit
+     * request, and arming it on a caller-owned attr would change what a later
+     * reuse of that attr programs. */
+    verbs_qp_init_attr->ordering_semantic = m_init_attr.ordering_semantic;
 
     return DOCA_SUCCESS;
 }
@@ -1324,6 +1337,23 @@ void doca_verbs_qp_open::create() {
         (m_verbs_device_attr->m_send_dbr_mode_no_dbr_ext == 0)) {
         DOCA_LOG(LOG_ERR, "No DBR-ext support is not supported by the device");
         throw DOCA_ERROR_NOT_SUPPORTED;
+    }
+
+    if (m_init_attr.ordering_semantic_set) {
+        if (m_init_attr.ordering_semantic > m_verbs_device_attr->m_dp_ordering_rc) {
+            DOCA_LOG(LOG_ERR, "Ordering semantic %u is not supported by the device",
+                     m_init_attr.ordering_semantic);
+            throw DOCA_ERROR_NOT_SUPPORTED;
+        }
+
+        /* A tier below the reported capability is only enforceable with the force
+         * bit; without it the device may still place out of order. */
+        if (m_init_attr.ordering_semantic < m_verbs_device_attr->m_dp_ordering_rc &&
+            m_verbs_device_attr->m_dp_ordering_force == 0) {
+            DOCA_LOG(LOG_ERR, "Ordering semantic %u is not enforceable by the device",
+                     m_init_attr.ordering_semantic);
+            throw DOCA_ERROR_NOT_SUPPORTED;
+        }
     }
 
     if (m_init_attr.emulate_no_dbr_ext &&
@@ -1644,6 +1674,8 @@ doca_verbs_qp_open::doca_verbs_qp_open(struct ibv_context *ibv_ctx,
     m_init_attr.core_direct_master = verbs_qp_init_attr->core_direct_master;
     m_init_attr.send_dbr_mode = verbs_qp_init_attr->send_dbr_mode;
     m_init_attr.emulate_no_dbr_ext = verbs_qp_init_attr->emulate_no_dbr_ext;
+    m_init_attr.ordering_semantic = verbs_qp_init_attr->ordering_semantic;
+    m_init_attr.ordering_semantic_set = verbs_qp_init_attr->ordering_semantic_set;
 
     try {
         create();
@@ -2373,10 +2405,21 @@ doca_error_t doca_verbs_qp_init_attr_set_ordering_semantic(
             return DOCA_ERROR_NOT_SUPPORTED;
         }
     } else {
-        DOCA_LOG(LOG_INFO,
-                 "QP init attribute setter set_ordering_semantic not supported in open mode.",
-                 __func__);
-        return DOCA_ERROR_NOT_SUPPORTED;
+        if (qp_init_attr->open == nullptr) {
+            DOCA_LOG(LOG_ERR, "Invalid DOCA Verbs QP attr open instance provided.");
+            return DOCA_ERROR_INVALID_VALUE;
+        }
+
+        if (ordering_semantic != DOCA_VERBS_QP_ORDERING_SEMANTIC_IBTA &&
+            ordering_semantic != DOCA_VERBS_QP_ORDERING_SEMANTIC_OOO_RW &&
+            ordering_semantic != DOCA_VERBS_QP_ORDERING_SEMANTIC_OOO_ALL) {
+            DOCA_LOG(LOG_ERR, "Failed to set ordering_semantic: invalid value %u",
+                     ordering_semantic);
+            return DOCA_ERROR_INVALID_VALUE;
+        }
+
+        qp_init_attr->open->ordering_semantic = static_cast<uint8_t>(ordering_semantic);
+        qp_init_attr->open->ordering_semantic_set = true;
     }
 
     return DOCA_SUCCESS;
@@ -2411,10 +2454,13 @@ doca_error_t doca_verbs_qp_init_attr_get_ordering_semantic(
             return DOCA_ERROR_NOT_SUPPORTED;
         }
     } else {
-        DOCA_LOG(LOG_INFO,
-                 "QP init attribute getter get_ordering_semantic not supported in open mode.",
-                 __func__);
-        return DOCA_ERROR_NOT_SUPPORTED;
+        if (qp_init_attr->open == nullptr) {
+            DOCA_LOG(LOG_ERR, "Invalid DOCA Verbs QP attr open instance provided.");
+            return DOCA_ERROR_INVALID_VALUE;
+        }
+
+        *ordering_semantic = static_cast<enum doca_verbs_qp_ordering_semantic>(
+            qp_init_attr->open->ordering_semantic);
     }
 
     return DOCA_SUCCESS;

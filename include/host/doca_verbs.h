@@ -898,7 +898,9 @@ doca_error_t doca_verbs_qp_init_attr_get_emulate_no_dbr_ext(
 /**
  * @brief Set ordering semantic attribute for verbs_qp_init_attr
  * @note Not setting ordering semantic doesn't guarantee ordering semantic didn't change (setting
- * ECE may change it) Supported only by SDK mode.
+ * ECE may change it).
+ * @note In open mode, the requested semantic is validated against the device when the QP is
+ * created and programmed into the QPC when the QP is moved to RTR.
  *
  * @param [in] verbs_qp_init_attr
  * Pointer to verbs_qp_init_attr instance.
@@ -909,7 +911,7 @@ doca_error_t doca_verbs_qp_init_attr_get_emulate_no_dbr_ext(
  * DOCA_SUCCESS - in case of success.
  * doca_error code - in case of failure:
  * - DOCA_ERROR_INVALID_VALUE - received invalid input.
- * - DOCA_ERROR_NOT_SUPPORTED - if qp_init_attr is called in open mode.
+ * - DOCA_ERROR_NOT_SUPPORTED - if the DOCA SDK installation doesn't support this setter.
  */
 doca_error_t doca_verbs_qp_init_attr_set_ordering_semantic(
     doca_verbs_qp_init_attr_t *verbs_qp_init_attr,
@@ -917,7 +919,6 @@ doca_error_t doca_verbs_qp_init_attr_set_ordering_semantic(
 
 /**
  * @brief Get ordering semantic attribute from verbs_qp_init_attr
- * Supported only by SDK mode.
  *
  * @param [in] verbs_qp_init_attr
  * Pointer to verbs_qp_init_attr instance.
@@ -928,10 +929,10 @@ doca_error_t doca_verbs_qp_init_attr_set_ordering_semantic(
  * DOCA_SUCCESS - in case of success.
  * doca_error code - in case of failure:
  * - DOCA_ERROR_INVALID_VALUE - received invalid input.
- * - DOCA_ERROR_NOT_SUPPORTED - if qp_init_attr is called in open mode.
+ * - DOCA_ERROR_NOT_SUPPORTED - if the DOCA SDK installation doesn't support this getter.
  */
 doca_error_t doca_verbs_qp_init_attr_get_ordering_semantic(
-    doca_verbs_qp_init_attr_t *verbs_qp_init_attr,
+    const doca_verbs_qp_init_attr_t *verbs_qp_init_attr,
     enum doca_verbs_qp_ordering_semantic *ordering_semantic);
 
 /**
@@ -1559,6 +1560,7 @@ uint8_t doca_verbs_ah_get_traffic_class(const doca_verbs_ah_attr_t *ah_attr);
  * doca_error code - in case of failure:
  * - DOCA_ERROR_INVALID_VALUE - received invalid input.
  * - DOCA_ERROR_NO_MEMORY - failed to allocate resources.
+ * - DOCA_ERROR_NOT_SUPPORTED - a requested attribute is not supported by the device.
  */
 doca_error_t doca_verbs_qp_create(doca_dev_t *net_dev, doca_verbs_qp_init_attr_t *qp_init_attr,
                                   doca_verbs_qp_t **verbs_qp);

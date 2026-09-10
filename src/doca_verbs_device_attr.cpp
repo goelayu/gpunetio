@@ -117,6 +117,8 @@ void doca_verbs_device_attr::query_caps(struct ibv_context *ibv_ctx) {
     m_max_qp_init_rd_atom = device_attr.max_qp_init_rd_atom;
     m_max_qp_rd_atom = device_attr.max_qp_rd_atom;
     m_send_dbr_mode_no_dbr_ext = 0;
+    m_dp_ordering_rc = DOCA_VERBS_QP_ORDERING_SEMANTIC_IBTA;
+    m_dp_ordering_force = 0;
 
     uint32_t in[MLX5_ST_SZ_DW(query_hca_cap_in)] = {0};
     uint32_t out[MLX5_ST_SZ_DW(query_hca_cap_out)] = {0};
@@ -141,6 +143,12 @@ void doca_verbs_device_attr::query_caps(struct ibv_context *ibv_ctx) {
     m_max_sq_desc_size = DEVX_GET(query_hca_cap_out, out, capability.cmd_hca_cap.max_wqe_sz_sq);
     m_max_rq_desc_size = DEVX_GET(query_hca_cap_out, out, capability.cmd_hca_cap.max_wqe_sz_rq);
     m_max_send_wqebb = 1 << DEVX_GET(query_hca_cap_out, out, capability.cmd_hca_cap.log_max_qp_sz);
+
+    if (DEVX_GET(query_hca_cap_out, out, capability.cmd_hca_cap.dp_ordering_ooo_all_rc))
+        m_dp_ordering_rc = DOCA_VERBS_QP_ORDERING_SEMANTIC_OOO_ALL;
+    /* multi_path_rc_rdma is the OOO_RW capability bit for RC. */
+    else if (DEVX_GET(query_hca_cap_out, out, capability.cmd_hca_cap.multi_path_rc_rdma))
+        m_dp_ordering_rc = DOCA_VERBS_QP_ORDERING_SEMANTIC_OOO_RW;
 
     has_hca_cap_2 = DEVX_GET(query_hca_cap_out, out, capability.cmd_hca_cap.hca_cap_2);
 
@@ -182,6 +190,8 @@ void doca_verbs_device_attr::query_caps(struct ibv_context *ibv_ctx) {
 
         m_send_dbr_mode_no_dbr_ext =
             DEVX_GET(query_hca_cap_out, out, capability.cmd_hca_cap_2.send_dbr_mode_no_dbr_ext);
+        m_dp_ordering_force =
+            DEVX_GET(query_hca_cap_out, out, capability.cmd_hca_cap_2.dp_ordering_force);
     }
 }
 

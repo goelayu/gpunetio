@@ -99,6 +99,9 @@ struct doca_verbs_qp_init_attr_open {
     uint8_t core_direct_master{};
     uint8_t send_dbr_mode{};
     bool emulate_no_dbr_ext{};
+    uint8_t ordering_semantic{};
+    /* Distinguishes explicit IBTA from an unset semantic. */
+    bool ordering_semantic_set{};
 
     doca_verbs_qp_init_attr_open(doca_verbs_qp_init_attr_open const &) = delete;
     doca_verbs_qp_init_attr_open &operator=(doca_verbs_qp_init_attr_open const &) = delete;
